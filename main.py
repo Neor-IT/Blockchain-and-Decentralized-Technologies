@@ -20,6 +20,9 @@ class Blockchain:
         hash_key = self.__make_hash()
         while len(hash_key) < len(str(self.keys)):
             hash_key += self.__make_hash()
+        if len(hash_key) > len(str(self.keys)):
+            print("BIGGER!")
+            hash_key = hash_key[:len(str(self.keys)) + 1]
         hash = f"0x{hash_key}"
         return hash
 
