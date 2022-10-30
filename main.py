@@ -1,53 +1,87 @@
-import hashlib
-from time import time
-from random import choice
-import itertools
+class Sha1:
+    def __init__(self, data):
+        self.data = data
+
+    @staticmethod
+    def __chunks(k, m):
+        return [k[i:i + m] for i in range(0, len(k), m)]
+
+    @staticmethod
+    def __rol(i, j):
+        return ((i << j) | (i >> (32 - j))) & 0xffffffff
+
+    def sha1(self):
+        bytes = ""
+
+        h0 = 0x67452301
+        h1 = 0xEFCDAB89
+        h2 = 0x98BADCFE
+        h3 = 0x10325476
+        h4 = 0xC3D2E1F0
+
+        for i in range(len(self.data)):
+            bytes += f"{ord(self.data[i]):08b}"
+        bits = bytes + "1"
+        _bits = bits
+
+        while len(_bits) % 512 != 448:
+            _bits += "0"
+
+        _bits += f"{len(bits) - 1:064b}"
+
+        for chunk in self.__chunks(_bits, 512):
+            words = self.__chunks(chunk, 32)
+            w = [0] * 80
+
+            for i in range(0, 16):
+                w[i] = int(words[i], 2)
+
+            for j in range(16, 80):
+                w[j] = self.__rol((w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16]), 1)
+
+            a = h0
+            b = h1
+            chunk = h2
+            d = h3
+            e = h4
+            f, k = 0, 0
+
+            for i in range(0, 80):
+
+                if 0 <= i <= 19:
+                    f = (b & chunk) | ((~b) & d)
+                    k = 0x5A827999
+
+                elif 20 <= i <= 39:
+                    f = b ^ chunk ^ d
+                    k = 0x6ED9EBA1
+
+                elif 40 <= i <= 59:
+                    f = (b & chunk) | (b & d) | (chunk & d)
+                    k = 0x8F1BBCDC
+
+                elif 60 <= i <= 79:
+                    f = b ^ chunk ^ d
+                    k = 0xCA62C1D6
+
+                temp = self.__rol(a, 5) + f + e + k + w[i] & 0xffffffff
+                e = d
+                d = chunk
+
+                chunk = self.__rol(b, 30)
+                b = a
+                a = temp
+
+            h0 = h0 + a & 0xffffffff
+            h1 = h1 + b & 0xffffffff
+            h2 = h2 + chunk & 0xffffffff
+            h3 = h3 + d & 0xffffffff
+            h4 = h4 + e & 0xffffffff
+
+        return "%08x%08x%08x%08x%08x" % (h0, h1, h2, h3, h4)
 
 
-class Blockchain:
-    def __init__(self):
-        self.alphabet = '0123456789abcdef'
-        self.prev_hash = ''
-        self.keys = 0
-        self.hash = ''
-
-    def __make_hash(self):
-        hash = hashlib.sha256()
-        hash.update((str(time()).join([choice(self.alphabet) for _ in range(len(str(self.keys)))])).encode('utf-8'))
-        return hash.hexdigest()[:len(str(self.keys))]
-
-    def __get_hash(self):
-        hash_key = self.__make_hash()
-        while len(hash_key) < len(str(self.keys)):
-            hash_key += self.__make_hash()
-        if len(hash_key) > len(str(self.keys)):
-            hash_key = hash_key[:len(str(self.keys)) + 1]
-        hash = f"0x{hash_key}"
-        return hash
-
-    def __brute(self):
-        time_start = time()
-        self.prev_hash = self.hash[2:]
-        self.prev_hash = tuple(self.prev_hash)
-        char_list = [[x for x in self.alphabet]] * len(self.prev_hash)
-
-        for combination in itertools.product(*char_list):
-            if combination == self.prev_hash:
-                hash = "0x" + "".join(combination)
-                print(f"Хеш {hash} забручений за {round((time() - time_start) * 1000)} ms!")
-
-    def main(self, length: int = 8):
-        while length <= 4096:
-            self.keys = 2 ** length
-            print(f"{length} bits\nПростір ключів: {self.keys}")
-            length *= 2
-            self.hash = self.__get_hash()
-            print("HASH:", self.hash)
-            choice = input("Бажаєте почати brute force цього хешу? (y/n): ").lower()
-            if choice == 'y':
-                self.__brute()
-            print("\n")
-
-
-Block = Blockchain()
-Block.main()
+if __name__ == "__main__":
+    print(Sha1("Hello, world!").sha1())  # 943a702d06f34599aee1f8da8ef9f7296031d699
+    print(Sha1("hello").sha1() == "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d")  # True
+    print(Sha1("Hello, world!").sha1() == "943a702d06f34599aee1f8da8ef9f7296031d699")  # True
