@@ -5,7 +5,7 @@ import math
 class RSA:
 
     @staticmethod
-    def is_prime(n):
+    def __is_prime(n):
         if n <= 1:
             return False
         if n == 2:
@@ -20,30 +20,30 @@ class RSA:
             i += 2
         return True
 
-    def generate_prime(self, a=0, b=100):
+    def __generate_prime(self, a=0, b=100):
         num = 0
-        while self.is_prime(num) is False:
+        while self.__is_prime(num) is False:
             num = random.randint(a, b)
         return num
 
     @staticmethod
-    def gcd(x, y):
+    def __gcd(x, y):
         while y:
             x, y = y, x % y
         return x
 
     def key_gen(self):
-        p = self.generate_prime()
-        q = self.generate_prime()
+        p = self.__generate_prime()
+        q = self.__generate_prime()
         n = p * q
 
         phi = (p - 1) * (q - 1)
         e = random.randint(1, phi)
-        g = self.gcd(e, phi)
+        g = self.__gcd(e, phi)
 
         while g != 1:
             e = random.randint(1, phi)
-            g = self.gcd(e, phi)
+            g = self.__gcd(e, phi)
 
         d = pow(e, -1, phi)
         return (e, n), (d, n)
@@ -68,9 +68,3 @@ if __name__ == '__main__':
 
     print('Encrypted message:', ''.join(map(lambda x: str(x), encrypted_message)))
     print('Decrypted message:', RSA().decrypt(encrypted_message, private))
-    # OUTPUT:
-    # Public key: (37, 194)
-    # Private key: (13, 194)
-    # Enter a message: Distributed Lab is a crypto and decentralized technology expertise center.
-    # Encrypted message: 92791051747479986717493667280979872791057297725374731017421729768667266935393681747497487932936672174935313468214821103737293141093741747910593725393681749374160
-    # Decrypted message: Distributed Lab is a crypto and decentralized technology expertise center.
