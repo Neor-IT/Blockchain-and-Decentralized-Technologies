@@ -1,53 +1,153 @@
-import hashlib
+from binascii import unhexlify, hexlify
 from time import time
-from random import choice
-import itertools
+import hashlib
+import os
+
+
+class Signature:
+    def __init__(self):
+        self.__data = {
+            "public_key": "",
+            "private_key": "",
+            "signature": ""
+        }
+
+    def get_data(self):
+        return self.__data
+
+    def get_public_key(self):
+        if self.__data['public_key'] == "":
+            self.__data['public_key'] = hexlify(hashlib.sha256(unhexlify(self.__data['signature'])).digest()).decode('utf8')
+        return self.__data['public_key']
+
+    def generate_keys(self):
+        self.__data['public_key'] = hexlify(os.urandom(32)).decode('utf8')
+        self.__data['private_key'] = hexlify(os.urandom(32)).decode('utf8')
+
+    def signature(self, message):
+        self.__data['signature'] = hexlify(hashlib.sha256(unhexlify(message)).digest()).decode('utf8')
+
+
+class KeyPair:
+    def verify(self, message, signature):
+        if hexlify(hashlib.sha256(unhexlify(message)).digest()).decode('utf8') == signature:
+            return True
+        else:
+            return False
+
+
+class Hash:
+    def make_hash(self, prev_hash):
+        hash = hexlify(hashlib.sha256(unhexlify(prev_hash)).digest()).decode('utf8')
+        while hash[:5] != "00000":
+            hash = hexlify(hashlib.sha256(unhexlify(hash)).digest()).decode('utf8')
+        return hash
+
+
+class Block:
+    def __init__(self, prev_hash, transaction, amount):
+        self.next = None
+
+        self.__data = {
+            "prev_hash": prev_hash,
+            "transaction": transaction,
+            "amount": amount,
+            "hash": "",
+            "time": time(),
+            "verified": False
+        }
+        self.__data['hash'] = Hash().make_hash(self.get_data()['prev_hash'])
+
+    def get_data(self):
+        return self.__data
+
+    def add_block(self, transaction, amount):
+        block = self
+        while block.next:
+            block = block.next
+        prev_hash = block.get_data()["hash"]
+        end = Block(prev_hash, transaction, amount)
+        block.next = end
+
+
+def print_blocks(block):
+    node = block
+    print(node.get_data())
+
+    while node.next:
+        node = node.next
+        print(node.get_data())
 
 
 class Blockchain:
     def __init__(self):
-        self.alphabet = '0123456789abcdef'
-        self.prev_hash = ''
-        self.keys = 0
-        self.hash = ''
+        self.__data = {
+            "blocks": []
+        }
 
-    def __make_hash(self):
-        hash = hashlib.sha256()
-        hash.update((str(time()).join([choice(self.alphabet) for _ in range(len(str(self.keys)))])).encode('utf-8'))
-        return hash.hexdigest()[:len(str(self.keys))]
+    def verify(self):
+        for block in self.__data["blocks"]:
 
-    def __get_hash(self):
-        hash_key = self.__make_hash()
-        while len(hash_key) < len(str(self.keys)):
-            hash_key += self.__make_hash()
-        if len(hash_key) > len(str(self.keys)):
-            hash_key = hash_key[:len(str(self.keys)) + 1]
-        hash = f"0x{hash_key}"
-        return hash
+            Sign = Signature()
+            Sign.generate_keys()
+            Sign.signature(block["hash"])
 
-    def __brute(self):
-        time_start = time()
-        self.prev_hash = self.hash[2:]
-        self.prev_hash = tuple(self.prev_hash)
-        char_list = [[x for x in self.alphabet]] * len(self.prev_hash)
+            if block["verified"] is False:
+                if KeyPair().verify(block["hash"], Sign.get_data()['signature']):
+                    block["verified"] = True
+                else:
+                    print("Invalid block!")
+                    break
 
-        for combination in itertools.product(*char_list):
-            if combination == self.prev_hash:
-                hash = "0x" + "".join(combination)
-                print(f"Хеш {hash} забручений за {round((time() - time_start) * 1000)} ms!")
+    def append(self, block):
+        node = block
+        self.__data["blocks"].append(node.get_data())
 
-    def main(self, length: int = 8):
-        while length <= 4096:
-            self.keys = 2 ** length
-            print(f"{length} bits\nПростір ключів: {self.keys}")
-            length *= 2
-            self.hash = self.__get_hash()
-            print("HASH:", self.hash)
-            choice = input("Бажаєте почати brute force цього хешу? (y/n): ").lower()
-            if choice == 'y':
-                self.__brute()
-            print("\n")
+        while node.next:
+            node = node.next
+            self.__data["blocks"].append(node.get_data())
+
+    def print_blocks(self):
+        for block in self.__data["blocks"]:
+            if block["verified"] is True:
+                print(block)
 
 
-Block = Blockchain()
-Block.main()
+blockchain = Blockchain()
+block = Block("0000000000000000000000000000000000000000000000000000000000000000", "Block #1", 0)
+
+
+class Account:
+    def __init__(self, username):
+        self.username = username
+        self.__data = {
+            "balance": 0,
+        }
+
+    def get_data(self):
+        return self.__data
+
+    def add_balance(self, amount):
+        self.__data['balance'] += amount
+
+    def remove_balance(self, amount):
+        self.__data['balance'] -= amount
+
+    def transfer(self, amount, public_key):
+        if self.__data['balance'] >= amount:
+            self.remove_balance(amount)
+            block.add_block(public_key, amount)
+            blockchain.append(block)
+            blockchain.verify()
+        else:
+            print("Not enough money!")
+
+    def print_balance(self):
+        print(f"Balance: {self.__data['balance']}")
+
+
+Account = Account(Signature().get_public_key())
+Account.add_balance(1000)
+Account.transfer(500, "65345d332342f5d513bd9ae0672ff3c5ab7967b0e22e14d4b817601b68950643")
+Account.print_balance()
+blockchain.print_blocks()
