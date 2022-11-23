@@ -1,153 +1,205 @@
 from binascii import unhexlify, hexlify
 from time import time
 import hashlib
-import os
-
-
-class Signature:
-    def __init__(self):
-        self.__data = {
-            "public_key": "",
-            "private_key": "",
-            "signature": ""
-        }
-
-    def get_data(self):
-        return self.__data
-
-    def get_public_key(self):
-        if self.__data['public_key'] == "":
-            self.__data['public_key'] = hexlify(hashlib.sha256(unhexlify(self.__data['signature'])).digest()).decode('utf8')
-        return self.__data['public_key']
-
-    def generate_keys(self):
-        self.__data['public_key'] = hexlify(os.urandom(32)).decode('utf8')
-        self.__data['private_key'] = hexlify(os.urandom(32)).decode('utf8')
-
-    def signature(self, message):
-        self.__data['signature'] = hexlify(hashlib.sha256(unhexlify(message)).digest()).decode('utf8')
+import random
+import math
 
 
 class KeyPair:
-    def verify(self, message, signature):
-        if hexlify(hashlib.sha256(unhexlify(message)).digest()).decode('utf8') == signature:
-            return True
-        else:
+
+    @staticmethod
+    def __isPrime(n):
+        if n <= 1:
             return False
+        if n == 2:
+            return True
+        if n % 2 == 0:
+            return False
+
+        i = 3
+        while i <= math.sqrt(n):
+            if n % i == 0:
+                return False
+            i += 2
+        return True
+
+    def __generate_prime(self, a=0, b=1000):
+        num = 0
+        while self.__isPrime(num) is False:
+            num = random.randint(a, b)
+        return num
+
+    @staticmethod
+    def __gcd(x, y):
+        while y:
+            x, y = y, x % y
+        return x
+
+    def __keyGen(self):
+        p = self.__generate_prime()
+        q = self.__generate_prime()
+        n = p * q
+
+        phi = (p - 1) * (q - 1)
+        e = random.randint(1, phi)
+        g = self.__gcd(e, phi)
+
+        while g != 1:
+            e = random.randint(1, phi)
+            g = self.__gcd(e, phi)
+
+        d = pow(e, -1, phi)
+        return (e, n), (d, n)
+
+    def genKeyPair(self):
+        self.privateKey, self.publicKey = self.__keyGen()
+        return self.privateKey, self.publicKey
+
+
+class Signature:
+
+    @staticmethod
+    def signData(message, primary_key):
+        key, n = primary_key
+        return [pow(ord(char), key, n) for char in message]
+
+    def verifySignature(self, message, signature, primary_key):
+        key, n = primary_key
+        return ''.join([chr(pow(char, key, n)) for char in signature]) == message
 
 
 class Hash:
-    def make_hash(self, prev_hash):
+
+    @staticmethod
+    def make_hash(prev_hash):
         hash = hexlify(hashlib.sha256(unhexlify(prev_hash)).digest()).decode('utf8')
         while hash[:5] != "00000":
             hash = hexlify(hashlib.sha256(unhexlify(hash)).digest()).decode('utf8')
         return hash
 
 
-class Block:
-    def __init__(self, prev_hash, transaction, amount):
-        self.next = None
-
-        self.__data = {
-            "prev_hash": prev_hash,
-            "transaction": transaction,
-            "amount": amount,
-            "hash": "",
-            "time": time(),
-            "verified": False
-        }
-        self.__data['hash'] = Hash().make_hash(self.get_data()['prev_hash'])
-
-    def get_data(self):
-        return self.__data
-
-    def add_block(self, transaction, amount):
-        block = self
-        while block.next:
-            block = block.next
-        prev_hash = block.get_data()["hash"]
-        end = Block(prev_hash, transaction, amount)
-        block.next = end
-
-
-def print_blocks(block):
-    node = block
-    print(node.get_data())
-
-    while node.next:
-        node = node.next
-        print(node.get_data())
-
-
-class Blockchain:
+class Account:  # improved in the future
     def __init__(self):
-        self.__data = {
-            "blocks": []
+        self.__accountID = 0
+        self.__wallet = []
+        self.__balance = 20
+
+        self.obj = {
+            "accountID": self.__accountID,
+            "wallet": self.__wallet,
+            "balance": self.__balance
         }
 
-    def verify(self):
-        for block in self.__data["blocks"]:
+    def genAccount(self, private_key, public_key):
+        self.__accountID = random.randint(0, int(time()))
+        self.__wallet.append(private_key)
+        self.__wallet.append(public_key)
 
-            Sign = Signature()
-            Sign.generate_keys()
-            Sign.signature(block["hash"])
+    def addKeyPairToWallet(self) -> None:
+        private, public = KeyPair().genKeyPair()
+        self.wallet = [private, public]
 
-            if block["verified"] is False:
-                if KeyPair().verify(block["hash"], Sign.get_data()['signature']):
-                    block["verified"] = True
-                else:
-                    print("Invalid block!")
-                    break
+    def updateBalance(self, amount) -> None:
+        self.__balance += amount
 
-    def append(self, block):
-        node = block
-        self.__data["blocks"].append(node.get_data())
-
-        while node.next:
-            node = node.next
-            self.__data["blocks"].append(node.get_data())
-
-    def print_blocks(self):
-        for block in self.__data["blocks"]:
-            if block["verified"] is True:
-                print(block)
-
-
-blockchain = Blockchain()
-block = Block("0000000000000000000000000000000000000000000000000000000000000000", "Block #1", 0)
-
-
-class Account:
-    def __init__(self, username):
-        self.username = username
-        self.__data = {
-            "balance": 0,
+    def createPaymentOp(self, amount, receiver):
+        data = {
+            "sender": self.obj["accountID"],
+            "receiver": receiver,
+            "amount": amount,
+            "data": self.signData(str(self.obj["accountID"]) + str(amount) + str(receiver), 0)
         }
 
-    def get_data(self):
-        return self.__data
+        self.updateBalance(-amount)
 
-    def add_balance(self, amount):
-        self.__data['balance'] += amount
+        return data
 
-    def remove_balance(self, amount):
-        self.__data['balance'] -= amount
+    def getBalance(self) -> int:
+        return self.__balance
 
-    def transfer(self, amount, public_key):
-        if self.__data['balance'] >= amount:
-            self.remove_balance(amount)
-            block.add_block(public_key, amount)
-            blockchain.append(block)
-            blockchain.verify()
-        else:
-            print("Not enough money!")
+    def printBalance(self):
+        print(self.__balance)
 
-    def print_balance(self):
-        print(f"Balance: {self.__data['balance']}")
+    def signData(self, message, index):
+        return Signature().signData(message, self.__wallet[index])
 
 
-Account = Account(Signature().get_public_key())
-Account.add_balance(1000)
-Account.transfer(500, "65345d332342f5d513bd9ae0672ff3c5ab7967b0e22e14d4b817601b68950643")
-Account.print_balance()
-blockchain.print_blocks()
+class Operation:  # improved in the future
+    def __init__(self):
+        self.sender = None
+        self.receiver = None
+        self.amount = None
+        self.signature = None
+
+        self.__data = {
+            "sender": self.sender,
+            "receiver": self.receiver,
+            "amount": self.amount,
+            "signature": self.signature
+        }
+
+    def createOperation(self, sender, receiver, amount, signature):
+        self.sender = sender
+        self.receiver = receiver
+        self.amount = amount
+        self.signature = signature
+
+    def verifyOperation(self, public_key, payment_op: dict):
+        if Signature().verifySignature(str(payment_op["sender"]) + str(payment_op["amount"]) + str(payment_op["receiver"]),
+                                      payment_op["data"], public_key):
+            if payment_op["amount"] <= Account().getBalance():
+                return True
+
+        return False
+
+
+class Transaction:  # improved in the future
+    def __init__(self):
+        self.transactionID = None
+        self.setOfOperations = []
+
+    def createOperation(self, operation, nonce):
+        self.transactionID = Hash().make_hash(str(operation) + str(nonce))
+        self.setOfOperations.append(operation)
+
+
+class Block:  # improved in the future
+    def __init__(self):
+        self.blockID = None
+        self.prevHash = None
+        self.setOfTransactions = []
+
+    def createBlock(self, prev_hash, nonce):
+        self.blockID = Hash().make_hash(str(prev_hash) + str(nonce))
+        self.prevHash = prev_hash
+
+
+class Blockchain:  # improved in the future
+    def __init__(self):
+        self.coinDatabase = {}
+        self.blockHistory = []
+        self.txDatabase = []
+        self.faucetCoins = None
+
+    def initBlockchain(self, faucetCoins):
+        self.faucetCoins = faucetCoins
+        self.blockHistory.append(Block().createBlock("0", 0))
+        self.coinDatabase[0] = faucetCoins
+
+    def getTokenFromFaucet(self, accountID):
+        self.coinDatabase[accountID] = self.faucetCoins
+
+    def validateBlock(self, block):
+        if block.blockID == Hash().make_hash(str(block.prevHash) + str(0)):
+            return True
+        return False
+
+    def getBalance(self, accountID):
+        return self.coinDatabase[accountID]
+    
+
+if __name__ == '__main__':
+    private, public = KeyPair().genKeyPair()
+
+    signature = Signature().signData(input('Enter a message: '), private)
+    print('Verify signature:', Signature().verifySignature(input("Enter a message: "), signature, public))
