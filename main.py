@@ -196,10 +196,22 @@ class Blockchain:  # improved in the future
 
     def getBalance(self, accountID):
         return self.coinDatabase[accountID]
-    
+
 
 if __name__ == '__main__':
     private, public = KeyPair().genKeyPair()
+    # print(private, public)
 
-    signature = Signature().signData(input('Enter a message: '), private)
-    print('Verify signature:', Signature().verifySignature(input("Enter a message: "), signature, public))
+    # signature = Signature().signData(input('Enter a message: '), private)
+    # print('Verify signature:', Signature().verifySignature(input("Enter a message: "), signature, public))
+
+    account = Account()
+    account.genAccount(private, public)
+    account.printBalance()
+    account.updateBalance(20)
+    account.printBalance()
+    account.createPaymentOp(10, "receiver")
+    account.signData("sender" + str(10) + "receiver", 0)
+    account.printBalance()
+    print(account.signData("message", 0))
+    
