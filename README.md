@@ -2,13 +2,9 @@
 
 Звіт із запуску коду:
 ```
-Enter a message: >? Hello, world!
-Enter a message: >? Hello, world!
-Verify signature: True
-```
-
-```
-Enter a message: >? hello, World!
-Enter a message: >? Hello, world!
-Verify signature: False
+(239767, 280667) (46903, 280667)
+0
+20
+10
+[8585, 201028, 29679, 29679, 241687, 251165, 201028]
 ```
