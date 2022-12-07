@@ -168,8 +168,8 @@ class Transaction:  # improved in the future
 
     def createOperation(self, operation, nonce):
         self.setOfOperations.append(operation)
-        self.transactionID = nonce
-
+        self.transactionID = abs(hash(str(self.setOfOperations) + str(nonce)))
+        print("Nonce:", nonce)
         return self.transactionID
 
 
