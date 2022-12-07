@@ -82,7 +82,7 @@ class Account:  # improved in the future
     def __init__(self):
         self.__accountID = 0
         self.__wallet = []
-        self.__balance = 20
+        self.__balance = 0
 
         self.obj = {
             "accountID": self.__accountID,
@@ -144,13 +144,18 @@ class Operation:  # improved in the future
         self.amount = amount
         self.signature = signature
 
-    def verifyOperation(self, public_key, payment_op: dict):
-        if Signature().verifySignature(str(payment_op["sender"]) + str(payment_op["amount"]) + str(payment_op["receiver"]),
-                                      payment_op["data"], public_key):
-            if payment_op["amount"] <= Account().getBalance():
-                return True
+        self.__data = {
+            "sender": self.sender,
+            "receiver": self.receiver,
+            "amount": self.amount,
+            "signature": self.signature
+        }
 
-        return False
+        return self.__data
+
+    def verifyOperation(self, public_key, payment_op: dict):
+        return Signature().verifySignature(str(payment_op["sender"]) + str(payment_op["amount"]) + str(payment_op["receiver"]),
+                                           payment_op["signature"], public_key)
 
 
 class Transaction:  # improved in the future
@@ -158,9 +163,14 @@ class Transaction:  # improved in the future
         self.transactionID = None
         self.setOfOperations = []
 
+    def make_nonce(self):
+        return hash(random.randint(0, int(time())))
+
     def createOperation(self, operation, nonce):
-        self.transactionID = Hash().make_hash(str(operation) + str(nonce))
         self.setOfOperations.append(operation)
+        self.transactionID = nonce
+
+        return self.transactionID
 
 
 class Block:  # improved in the future
@@ -200,10 +210,10 @@ class Blockchain:  # improved in the future
 
 if __name__ == '__main__':
     private, public = KeyPair().genKeyPair()
-    # print(private, public)
+    print("private, public keys:", private, public)
 
-    # signature = Signature().signData(input('Enter a message: '), private)
-    # print('Verify signature:', Signature().verifySignature(input("Enter a message: "), signature, public))
+    signature = Signature().signData("message", private)
+    print('Verify signature:', Signature().verifySignature("message", signature, public))
 
     account = Account()
     account.genAccount(private, public)
@@ -213,5 +223,12 @@ if __name__ == '__main__':
     account.createPaymentOp(10, "receiver")
     account.signData("sender" + str(10) + "receiver", 0)
     account.printBalance()
-    print(account.signData("message", 0))
-    
+    print("Sign data:", account.signData("message", 0))
+
+    operation = Operation()
+    operation.createOperation("sender", "receiver", 10, account.signData("sender" + str(10) + "receiver", 0))
+    print("Verify Operation:", operation.verifyOperation(public, operation.createOperation("sender", "receiver", 10, account.signData("sender" + str(10) + "receiver", 0))))
+
+    transaction = Transaction()
+    transaction.createOperation(operation.createOperation("sender", "receiver", 10, account.signData("sender" + str(10) + "receiver", 0)), transaction.make_nonce())
+    print("Transaction ID:", transaction.transactionID)
