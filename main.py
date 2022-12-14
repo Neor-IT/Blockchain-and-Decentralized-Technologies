@@ -6,7 +6,6 @@ import math
 
 
 class KeyPair:
-
     @staticmethod
     def __isPrime(n):
         if n <= 1:
@@ -23,7 +22,7 @@ class KeyPair:
             i += 2
         return True
 
-    def __generate_prime(self, a=0, b=1000):
+    def __generatePrime(self, a=0, b=1000):
         num = 0
         while self.__isPrime(num) is False:
             num = random.randint(a, b)
@@ -36,8 +35,8 @@ class KeyPair:
         return x
 
     def __keyGen(self):
-        p = self.__generate_prime()
-        q = self.__generate_prime()
+        p = self.__generatePrime()
+        q = self.__generatePrime()
         n = p * q
 
         phi = (p - 1) * (q - 1)
@@ -57,7 +56,6 @@ class KeyPair:
 
 
 class Signature:
-
     @staticmethod
     def signData(message, primary_key):
         key, n = primary_key
@@ -68,21 +66,11 @@ class Signature:
         return ''.join([chr(pow(char, key, n)) for char in signature]) == message
 
 
-class Hash:
-
-    @staticmethod
-    def make_hash(prev_hash):
-        hash = hexlify(hashlib.sha256(unhexlify(prev_hash)).digest()).decode('utf8')
-        while hash[:5] != "00000":
-            hash = hexlify(hashlib.sha256(unhexlify(hash)).digest()).decode('utf8')
-        return hash
-
-
-class Account:  # improved in the future
+class Account:
     def __init__(self):
         self.__accountID = 0
         self.__wallet = []
-        self.__balance = 20
+        self.__balance = 0
 
         self.obj = {
             "accountID": self.__accountID,
@@ -124,94 +112,194 @@ class Account:  # improved in the future
         return Signature().signData(message, self.__wallet[index])
 
 
-class Operation:  # improved in the future
+class Operation:
     def __init__(self):
         self.sender = None
         self.receiver = None
         self.amount = None
         self.signature = None
+        self.hash = None
 
-        self.__data = {
-            "sender": self.sender,
-            "receiver": self.receiver,
-            "amount": self.amount,
-            "signature": self.signature
-        }
-
-    def createOperation(self, sender, receiver, amount, signature):
+    def createOperation(self, sender, receiver, amount, signature, prev_hash):
         self.sender = sender
         self.receiver = receiver
         self.amount = amount
         self.signature = signature
+        print("Calculating hash...")
+        self.hash = Hash().toHash(prev_hash)
+
+        self.data = {
+            "sender": self.sender,
+            "receiver": self.receiver,
+            "amount": self.amount,
+            "signature": self.signature,
+            "prev_hash": prev_hash,
+            "hash": self.hash
+        }
+
+        return self.data
 
     def verifyOperation(self, public_key, payment_op: dict):
-        if Signature().verifySignature(str(payment_op["sender"]) + str(payment_op["amount"]) + str(payment_op["receiver"]),
-                                      payment_op["data"], public_key):
-            if payment_op["amount"] <= Account().getBalance():
-                return True
-
-        return False
+        return Signature().verifySignature(str(payment_op["sender"]) + str(payment_op["amount"]) + str(payment_op["receiver"]),
+                                           payment_op["signature"], public_key)
 
 
-class Transaction:  # improved in the future
+class Transaction:
     def __init__(self):
         self.transactionID = None
         self.setOfOperations = []
 
+    def makeNonce(self):
+        return hash(random.randint(0, int(time())))
+
     def createOperation(self, operation, nonce):
-        self.transactionID = Hash().make_hash(str(operation) + str(nonce))
         self.setOfOperations.append(operation)
+        self.transactionID = abs(hash(str(self.setOfOperations) + str(nonce)))
+        print("Nonce:", nonce)
+        # print("setOfOperations:", self.setOfOperations)
+        return self.setOfOperations
 
 
-class Block:  # improved in the future
+class Hash:
+    @staticmethod
+    def toHash(prev_hash):
+        print("PREV_HASH:", prev_hash)
+        hash = hexlify(hashlib.sha256(unhexlify(prev_hash)).digest()).decode('utf8')
+        while hash[:5] != "00000":
+            hash = hexlify(hashlib.sha256(unhexlify(hash)).digest()).decode('utf8')
+        return hash
+
+
+class Block:
     def __init__(self):
         self.blockID = None
         self.prevHash = None
         self.setOfTransactions = []
 
-    def createBlock(self, prev_hash, nonce):
-        self.blockID = Hash().make_hash(str(prev_hash) + str(nonce))
+    def createBlock(self, prev_hash, transaction):
+        self.blockID = abs(hash(str(transaction) + str(prev_hash)))
         self.prevHash = prev_hash
+        self.setOfTransactions.append(transaction)
+
+        return self.setOfTransactions
 
 
-class Blockchain:  # improved in the future
+class Blockchain:
     def __init__(self):
         self.coinDatabase = {}
         self.blockHistory = []
         self.txDatabase = []
-        self.faucetCoins = None
+        self.faucetCoins = 100
 
-    def initBlockchain(self, faucetCoins):
-        self.faucetCoins = faucetCoins
-        self.blockHistory.append(Block().createBlock("0", 0))
-        self.coinDatabase[0] = faucetCoins
+    def initBlockchain(self):
+        genesisBlock = Block().createBlock("0", Transaction().createOperation(
+            Operation().createOperation(None, 1, self.faucetCoins, None, '0000000000000000000000000000000000000000000000000000000000000000'), Transaction().makeNonce()))
+        self.blockHistory.append(genesisBlock)
+        self.coinDatabase[1] = self.faucetCoins
 
-    def getTokenFromFaucet(self, accountID):
-        self.coinDatabase[accountID] = self.faucetCoins
+        return self.blockHistory
 
-    def validateBlock(self, block):
-        if block.blockID == Hash().make_hash(str(block.prevHash) + str(0)):
-            return True
-        return False
+    def getTokenFromFaucet(self, account):
+        account.genAccount(*KeyPair().genKeyPair())
+        account.updateBalance(self.faucetCoins)
+        self.coinDatabase[account.obj["accountID"]] = account
 
-    def getBalance(self, accountID):
-        return self.coinDatabase[accountID]
+        return account
+
+    def validateBlock(self, block: Block, prev_hash, public_key):
+        if block.prevHash != prev_hash:
+            print("Block is not valid")
+            return False
+
+        for transaction in block.setOfTransactions:
+            for operation in transaction:
+                # print(operation)
+                if Operation().verifyOperation(public_key, operation):
+                    print("Operation is not valid")
+                    return False
+                print("balance", self.coinDatabase[operation["sender"]].getBalance())
+                if not self.coinDatabase[operation["sender"]].getBalance() >= operation["amount"]:
+                    print("Not enough coins")
+                    return False
+
+        self.blockHistory.append(block)
+        return True
+
+    def getBalanceFromFaucet(self, account):
+        return self.getTokenFromFaucet(account).getBalance()
 
 
 if __name__ == '__main__':
     private, public = KeyPair().genKeyPair()
-    # print(private, public)
+    # print("private, public keys:", private, public)
 
-    # signature = Signature().signData(input('Enter a message: '), private)
-    # print('Verify signature:', Signature().verifySignature(input("Enter a message: "), signature, public))
+    # signature = Signature().signData("message", private)
+    # print('Verify signature:', Signature().verifySignature("message", signature, public))
 
     account = Account()
     account.genAccount(private, public)
-    account.printBalance()
-    account.updateBalance(20)
-    account.printBalance()
-    account.createPaymentOp(10, "receiver")
-    account.signData("sender" + str(10) + "receiver", 0)
-    account.printBalance()
-    print(account.signData("message", 0))
-    
+    # print("Account:", account.obj)
+    # print("Balance:", account.getBalance())
+
+    blockchain = Blockchain()
+    blockchain.initBlockchain()
+    # print("Blockchain:", blockchain.blockHistory)
+    genesis_hash = blockchain.blockHistory[0][0][0]["hash"]
+    # get token from faucet
+    blockchain.getBalanceFromFaucet(account)
+    # print("Balance:", account.getBalance())
+
+    # create transaction
+    operation = Operation()
+    data = operation.createOperation(account.obj["accountID"], "receiver", 10, public, genesis_hash)
+    # print("data", data)
+    transaction = Transaction()
+    transaction.createOperation(data, transaction.makeNonce())
+    # print("Transaction:", transaction.setOfOperations)
+
+    block = Block()
+    # create block
+    block.createBlock(blockchain.blockHistory[-1], transaction.setOfOperations)
+    # print(transaction.setOfOperations)
+    # print("Block:", block.setOfTransactions)
+
+    # validate block
+    validate = blockchain.validateBlock(block, blockchain.blockHistory[-1], public)
+    if validate:
+        print("Block is valid")
+        print(block.setOfTransactions)
+        for transaction in block.setOfTransactions:
+            for operation in transaction:
+                print(operation)
+        account.createPaymentOp(operation["amount"], operation["receiver"])
+
+    # print("Blockchain:", blockchain.blockHistory)
+    # print("Coin database:", blockchain.coinDatabase)
+    print("Balance:", account.getBalance())
+
+    # create transaction
+    operation = Operation()
+    data = operation.createOperation(account.obj["accountID"], "receiver", 10, public, data["hash"])
+    # print("data", data)
+    transaction = Transaction()
+    transaction.createOperation(data, transaction.makeNonce())
+    # print("Transaction:", transaction.setOfOperations)
+
+    block = Block()
+    # create block
+    block.createBlock(blockchain.blockHistory[-1], transaction.setOfOperations)
+    # print(transaction.setOfOperations)
+    # print("Block:", block.setOfTransactions)
+
+    # validate block
+    validate = blockchain.validateBlock(block, blockchain.blockHistory[-1], public)
+    if validate:
+        print("Block is valid")
+        print(block.setOfTransactions)
+        for transaction in block.setOfTransactions:
+            for operation in transaction:
+                print(operation)
+        account.createPaymentOp(operation["amount"], operation["receiver"])
+
+    print("Blockchain:", blockchain.blockHistory)
+    print("Balance:", account.getBalance())
